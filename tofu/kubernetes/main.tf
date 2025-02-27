@@ -6,74 +6,72 @@ module "talos" {
   }
 
   image = {
-    version = "v1.9.2"
-    update_version = "v1.9.3" # renovate: github-releases=siderolabs/talos
+    version = "v1.9.4"
+    update_version = "v1.9.4" # renovate: github-releases=siderolabs/talos
     schematic = file("${path.module}/talos/image/schematic.yaml")
     # Point this to a new schematic file to update the schematic
     update_schematic = file("${path.module}/talos/image/schematic.yaml")
   }
 
   cilium = {
-    values = file("${path.module}/../../k8s/infra/network/cilium/values.yaml")
+    values  = file("${path.module}/../../k8s/infra/network/cilium/values.yaml")
     install = file("${path.module}/talos/inline-manifests/cilium-install.yaml")
   }
 
   cluster = {
-    name            = "talos"
-    endpoint        = "192.168.1.102"
-    gateway         = "192.168.1.1"
-    talos_version   = "v1.8"
-    proxmox_cluster = "homelab"
+    name = "talos"
+    # This points to the vip as below(if nodes on layer 2) or one of the nodes (if nodes not on layer 2)
+    # Note: Nodes are not on layer 2 if there is a router between them (even a mesh router)
+    #       Not sure how it works if connected to the same router via ethernet (does it act as a switch then???)
+    endpoint = "192.168.71.50"
+    # Omit this if devices are not connected on layer 2
+    vip             = "192.168.71.50"
+    gateway         = "192.168.64.1"
+    subnet_mask     = "18"
+    talos_version   = "v1.9.4"
+    proxmox_cluster = "HomeLab"
   }
 
   nodes = {
-    "ctrl-00" = {
-      host_node     = "abel"
+    "talos-ctrl-01" = {
+      host_node     = "pve01"
       machine_type  = "controlplane"
-      ip            = "192.168.1.100"
-      mac_address   = "BC:24:11:2E:C8:00"
-      vm_id         = 800
-      cpu           = 8
-      ram_dedicated = 28672
-      igpu          = true
-    }
-    "ctrl-01" = {
-      host_node     = "euclid"
-      machine_type  = "controlplane"
-      ip            = "192.168.1.101"
-      mac_address   = "BC:24:11:2E:C8:01"
-      vm_id         = 801
-      cpu           = 4
-      ram_dedicated = 20480
-      igpu          = true
-      #update        = true
-    }
-    "ctrl-02" = {
-      host_node     = "cantor"
-      machine_type  = "controlplane"
-      ip            = "192.168.1.102"
-      mac_address   = "BC:24:11:2E:C8:02"
-      vm_id         = 802
-      cpu           = 4
+      ip            = "192.168.71.51"
+      mac_address   = "BC:24:11:DE:49:29"
+      vm_id         = 201
+      cpu           = 2
       ram_dedicated = 4096
+      #igpu          = true
+      #update = true
+    }
+    "talos-ctrl-02" = {
+      host_node     = "pve02"
+      machine_type  = "controlplane"
+      ip            = "192.168.71.52"
+      mac_address   = "BC:24:11:83:29:D1"
+      vm_id         = 202
+      cpu           = 2
+      ram_dedicated = 4096
+      #igpu          = true
+      update = true
+    }
+    "talos-ctrl-03" = {
+      host_node     = "pve03"
+      machine_type  = "controlplane"
+      ip            = "192.168.71.53"
+      mac_address   = "BC:24:11:C7:12:F2"
+      vm_id         = 203
+      cpu           = 2
+      ram_dedicated = 4096
+      #igpu          = true
       #update        = true
     }
-    #    "work-00" = {
-    #      host_node     = "abel"
-    #      machine_type  = "worker"
-    #      ip            = "192.168.1.110"
-    #      mac_address   = "BC:24:11:2E:A8:00"
-    #      vm_id         = 810
-    #      cpu           = 8
-    #      ram_dedicated = 4096
-    #    }
   }
-
 }
 
 module "sealed_secrets" {
   depends_on = [module.talos]
-  source = "./bootstrap/sealed-secrets"
+  source     = "./bootstrap/sealed-secrets"
 
   providers = {
     kubernetes = kubernetes
@@ -81,14 +79,14 @@ module "sealed_secrets" {
 
   // openssl req -x509 -days 365 -nodes -newkey rsa:4096 -keyout sealed-secrets.key -out sealed-secrets.crt -subj "/CN=sealed-secret/O=sealed-secret"
   cert = {
-    cert = file("${path.module}/bootstrap/sealed-secrets/certificate/sealed-secrets.crt")
-    key = file("${path.module}/bootstrap/sealed-secrets/certificate/sealed-secrets.key")
+    cert = file("${path.module}/bootstrap/sealed-secrets/certificates/sealed-secrets.crt")
+    key  = file("${path.module}/bootstrap/sealed-secrets/certificates/sealed-secrets.key")
   }
 }
 
 module "proxmox_csi_plugin" {
   depends_on = [module.talos]
-  source = "./bootstrap/proxmox-csi-plugin"
+  source     = "./bootstrap/proxmox-csi-plugin"
 
   providers = {
     proxmox    = proxmox
@@ -100,7 +98,7 @@ module "proxmox_csi_plugin" {
 
 module "volumes" {
   depends_on = [module.proxmox_csi_plugin]
-  source = "./bootstrap/volumes"
+  source     = "./bootstrap/volumes"
 
   providers = {
     restapi    = restapi
@@ -108,61 +106,5 @@ module "volumes" {
   }
   proxmox_api = var.proxmox
   volumes = {
-    pv-sonarr = {
-      node = "cantor"
-      size = "4G"
-    }
-    pv-radarr = {
-      node = "cantor"
-      size = "4G"
-    }
-    pv-lidarr = {
-      node = "cantor"
-      size = "4G"
-    }
-    pv-prowlarr = {
-      node = "euclid"
-      size = "1G"
-    }
-    pv-torrent = {
-      node = "euclid"
-      size = "1G"
-    }
-    pv-remark42 = {
-      node = "euclid"
-      size = "1G"
-    }
-    pv-authelia-postgres = {
-      node = "euclid"
-      size = "2G"
-    }
-    pv-lldap-postgres = {
-      node = "euclid"
-      size = "2G"
-    }
-    pv-keycloak-postgres = {
-      node = "euclid"
-      size = "2G"
-    }
-    pv-jellyfin = {
-      node = "euclid"
-      size = "12G"
-    }
-    pv-netbird-signal = {
-      node = "abel"
-      size = "512M"
-    }
-    pv-netbird-management = {
-      node = "abel"
-      size = "512M"
-    }
-    pv-plex = {
-      node = "abel"
-      size = "12G"
-    }
-    pv-prometheus = {
-      node = "abel"
-      size = "10G"
-    }
   }
 }
